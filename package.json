@@ -1,0 +1,26 @@
+{
+  "name": "@zenith/agent-core",
+  "version": "1.0.0",
+  "description": "Runtime compartido para todos los agentes ZENITH: router multimodelo con fallback, memoria en capas, registro de skills deterministas y verificador de acciones irreversibles. Cero dependencias en runtime.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./router": "./src/router/index.js",
+    "./skills": "./src/skills/index.js",
+    "./memory": "./src/memory/index.js",
+    "./verifier": "./src/verifier/index.js"
+  },
+  "scripts": {
+    "test": "node test/smoke.js",
+    "check": "node --check index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "pg": "^8.11.0"
+  }
+}
