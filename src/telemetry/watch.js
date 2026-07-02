@@ -14,10 +14,9 @@
 //   - Cualquier fallo de red hacia Watch se traga en silencio, con timeout corto.
 //   - El handler que devolvemos nunca lanza (y además el router lo envuelve en try).
 //
-// Limitación v1 (documentada): los providers del router devuelven solo texto, sin
-// usage — los eventos van con tokens=0 y cost_usd=0. Watch igual da visibilidad de
-// latencia, tasa de error y uso de fallback, que es lo operativamente crítico.
-// Cuando los providers expongan usage, este adaptador lo propagará.
+// Tokens: desde v1.1 los providers anthropic/gemini exponen usage real y el router lo
+// emite en provider_success → aquí se propaga a Watch. cost_usd va en 0 (el catálogo de
+// precios vive en Watch/@zenith/pricing; calcularlo aquí duplicaría la tabla).
 
 const TIMEOUT_MS = 3000;
 
@@ -69,8 +68,8 @@ function createWatchTelemetry(config = {}) {
         duration_ms: ms,
         status: evt.type === 'provider_success' ? 'success' : 'error',
         error_code: evt.type === 'provider_error' ? String(evt.error || 'ERROR') : null,
-        input_tokens: 0,
-        output_tokens: 0,
+        input_tokens: (evt.usage && Number.isFinite(evt.usage.inputTokens)) ? evt.usage.inputTokens : 0,
+        output_tokens: (evt.usage && Number.isFinite(evt.usage.outputTokens)) ? evt.usage.outputTokens : 0,
         cost_usd: 0,
         cache_hit: false,
         retries: 0,

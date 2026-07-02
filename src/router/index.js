@@ -19,6 +19,13 @@ const ollama = require('./providers/ollama');
  * @property {Array}  [history]      Historial formato Gemini: [{ role, parts:[{text}] }].
  * @property {number} [maxTokens]    Límite de tokens de salida. Default 512.
  * @property {number} [temperature]  Default 0.5.
+ * @property {Array}  [tools]        Tool-calling (formato Anthropic). Solo lo reciben los
+ *                                   providers con supportsTools; los demás corren SIN tools
+ *                                   (fallback degradado a texto, estilo AURA).
+ * @property {Object} [toolChoice]   Default { type: 'auto' } cuando hay tools.
+ * @property {Array}  [rawMessages]  Turnos crudos formato Anthropic (content blocks) para
+ *                                   follow-ups de tools. Providers sin supportsRawMessages
+ *                                   se SALTAN cuando viene esto (no saben interpretarlo).
  */
 
 /**
@@ -53,6 +60,9 @@ function createRouter({ providers, onEvent } = {}) {
       history: Array.isArray(request.history) ? request.history : [],
       maxTokens: Number.isFinite(request.maxTokens) ? request.maxTokens : 512,
       temperature: Number.isFinite(request.temperature) ? request.temperature : 0.5,
+      tools: Array.isArray(request.tools) ? request.tools : undefined,
+      toolChoice: request.toolChoice,
+      rawMessages: Array.isArray(request.rawMessages) ? request.rawMessages : undefined,
     };
 
     const attempts = [];
@@ -61,16 +71,32 @@ function createRouter({ providers, onEvent } = {}) {
         emit({ type: 'provider_skip', provider: p.provider, model: p.model, ...meta });
         continue;
       }
+      // Turnos crudos de tool-calling: un provider texto-only no sabe interpretarlos → se salta.
+      if (normalized.rawMessages && !p.supportsRawMessages) {
+        emit({ type: 'provider_skip', provider: p.provider, model: p.model, reason: 'raw_messages', ...meta });
+        continue;
+      }
+      // Tools: solo se pasan a providers que las soportan; el resto corre sin tools
+      // (fallback degradado a texto — mismo comportamiento que AURA hoy).
+      const req = normalized.tools && !p.supportsTools
+        ? { ...normalized, tools: undefined, toolChoice: undefined }
+        : normalized;
       const startedAt = Date.now();
       emit({ type: 'provider_attempt', provider: p.provider, model: p.model, ...meta });
       try {
-        const text = await p.call(normalized);
-        if (typeof text !== 'string' || text.trim().length === 0) {
+        const out = await p.call(req);
+        // Back-compat: providers viejos devuelven string; los v1.1 devuelven objeto.
+        const text = typeof out === 'string' ? out : (out && typeof out.text === 'string' ? out.text : '');
+        const toolUse = typeof out === 'object' && out !== null ? (out.toolUse || null) : null;
+        const content = typeof out === 'object' && out !== null ? (out.content || null) : null;
+        const usage = typeof out === 'object' && out !== null ? (out.usage || null) : null;
+        // Éxito = hay texto O el modelo invocó una herramienta (turno de tools sin texto es válido).
+        if (text.trim().length === 0 && !toolUse) {
           throw new Error('respuesta vacía');
         }
         const ms = Date.now() - startedAt;
-        emit({ type: 'provider_success', provider: p.provider, model: p.model, ms, ...meta });
-        return { text, provider: p.provider, model: p.model, attempts: attempts.length + 1, ms };
+        emit({ type: 'provider_success', provider: p.provider, model: p.model, ms, usage, ...meta });
+        return { text, toolUse, content, usage, provider: p.provider, model: p.model, attempts: attempts.length + 1, ms };
       } catch (error) {
         const ms = Date.now() - startedAt;
         attempts.push({ provider: p.provider, model: p.model, error: error.message });

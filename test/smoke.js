@@ -221,6 +221,77 @@ const mockProvider = (name, behavior) => ({
     assert.strictEqual(applied, false);
   });
 
+  console.log('ROUTER v1.1 — TOOLS Y USAGE');
+
+  // Provider estilo v1.1: devuelve objeto { text, toolUse, content, usage } y registra
+  // qué request recibió (para verificar si tools/rawMessages le llegaron o se filtraron).
+  const toolProvider = (name, { supportsTools = false, supportsRawMessages = false, respuesta } = {}) => {
+    const p = {
+      provider: name,
+      model: `${name}-model`,
+      supportsTools,
+      supportsRawMessages,
+      requests: [],
+      skip: () => false,
+      call: async (req) => { p.requests.push(req); return respuesta; },
+    };
+    return p;
+  };
+
+  const TOOLS_DEMO = [{ name: 'agendar_cita', input_schema: { type: 'object' } }];
+
+  await test('tools llegan al provider que las soporta', async () => {
+    const p = toolProvider('anthropic', { supportsTools: true, respuesta: { text: 'ok', toolUse: null, usage: null } });
+    const r = createRouter({ providers: [p] });
+    await r.run({ user: 'agenda', tools: TOOLS_DEMO });
+    assert.deepStrictEqual(p.requests[0].tools, TOOLS_DEMO);
+  });
+
+  await test('tools se FILTRAN para providers texto-only (fallback degradado, estilo AURA)', async () => {
+    const conTools = toolProvider('anthropic', { supportsTools: true, respuesta: { text: '', toolUse: null, usage: null } }); // vacío → falla
+    const sinTools = toolProvider('gemini', { respuesta: { text: 'texto plano', toolUse: null, usage: null } });
+    const r = createRouter({ providers: [conTools, sinTools] });
+    const out = await r.run({ user: 'agenda', tools: TOOLS_DEMO });
+    assert.strictEqual(out.provider, 'gemini');
+    assert.strictEqual(sinTools.requests[0].tools, undefined);
+  });
+
+  await test('toolUse sin texto cuenta como ÉXITO (turno de tool-calling válido)', async () => {
+    const p = toolProvider('anthropic', {
+      supportsTools: true,
+      respuesta: { text: '', toolUse: { id: 't1', name: 'agendar_cita', input: { fecha: 'x' } }, content: [{ type: 'tool_use' }], usage: { inputTokens: 10, outputTokens: 5 } },
+    });
+    const r = createRouter({ providers: [p] });
+    const out = await r.run({ user: 'agenda', tools: TOOLS_DEMO });
+    assert.strictEqual(out.toolUse.name, 'agendar_cita');
+    assert.deepStrictEqual(out.usage, { inputTokens: 10, outputTokens: 5 });
+    assert.ok(Array.isArray(out.content));
+  });
+
+  await test('rawMessages: provider que no los soporta se SALTA', async () => {
+    const textoOnly = toolProvider('gemini', { respuesta: { text: 'no debería correr', toolUse: null, usage: null } });
+    const crudo = toolProvider('anthropic', { supportsTools: true, supportsRawMessages: true, respuesta: { text: 'follow-up ok', toolUse: null, usage: null } });
+    const eventos = [];
+    const r = createRouter({ providers: [textoOnly, crudo], onEvent: (e) => eventos.push(e) });
+    const out = await r.run({ user: 'x', rawMessages: [{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'listo' }] }] });
+    assert.strictEqual(out.provider, 'anthropic');
+    assert.strictEqual(textoOnly.requests.length, 0);
+    assert.ok(eventos.some((e) => e.type === 'provider_skip' && e.reason === 'raw_messages'));
+  });
+
+  await test('usage viaja hasta el evento de Watch (tokens reales)', async () => {
+    const { createWatchTelemetry: cwt } = require('../src/telemetry/watch');
+    const capturados = [];
+    const onEvent = cwt({ ingestUrl: 'https://w.test', apiKey: 'k', clientId: 'client_1', agentId: 'agent_1',
+      fetchFn: async (_u, opts) => { capturados.push(JSON.parse(opts.body).events[0]); } });
+    const p = toolProvider('anthropic', { supportsTools: true, respuesta: { text: 'ok', toolUse: null, usage: { inputTokens: 321, outputTokens: 45 } } });
+    const r = createRouter({ providers: [p], onEvent });
+    await r.run({ user: 'hola' });
+    await new Promise((res) => setImmediate(res));
+    assert.strictEqual(capturados[0].input_tokens, 321);
+    assert.strictEqual(capturados[0].output_tokens, 45);
+  });
+
   console.log('TELEMETRÍA WATCH');
   const { createWatchTelemetry } = require('../src/telemetry/watch');
   const watchCfg = { ingestUrl: 'https://watch.test', apiKey: 'zw_test', clientId: 'client_x', agentId: 'agent_y' };

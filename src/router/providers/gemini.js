@@ -44,7 +44,13 @@ module.exports = function gemini(cfg = {}) {
         data && data.candidates && data.candidates[0] &&
         data.candidates[0].content && data.candidates[0].content.parts &&
         data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
-      return (text || '').trim();
+      const usage = data && data.usageMetadata
+        ? {
+            inputTokens: data.usageMetadata.promptTokenCount || 0,
+            outputTokens: data.usageMetadata.candidatesTokenCount || 0,
+          }
+        : null;
+      return { text: (text || '').trim(), toolUse: null, content: null, usage };
     },
   };
 };
