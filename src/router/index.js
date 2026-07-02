@@ -26,6 +26,9 @@ const ollama = require('./providers/ollama');
  * @property {Array}  [rawMessages]  Turnos crudos formato Anthropic (content blocks) para
  *                                   follow-ups de tools. Providers sin supportsRawMessages
  *                                   se SALTAN cuando viene esto (no saben interpretarlo).
+ * @property {Function} [validate]   Validador de salida: (text, out) => truthy si la respuesta
+ *                                   sirve. Falsy o throw = el proveedor "falló" → se intenta el
+ *                                   siguiente. Para tareas de extracción (¿es JSON parseable?).
  */
 
 /**
@@ -93,6 +96,14 @@ function createRouter({ providers, onEvent } = {}) {
         // Éxito = hay texto O el modelo invocó una herramienta (turno de tools sin texto es válido).
         if (text.trim().length === 0 && !toolUse) {
           throw new Error('respuesta vacía');
+        }
+        // Validación de salida del caller: una respuesta que no sirve (p.ej. no es JSON
+        // parseable en tareas de extracción) cuenta como fallo → siguiente proveedor.
+        if (typeof request.validate === 'function' && !toolUse) {
+          let valida = false;
+          try { valida = Boolean(request.validate(text, { toolUse, content, usage })); }
+          catch { valida = false; }
+          if (!valida) throw new Error('validación de salida fallida');
         }
         const ms = Date.now() - startedAt;
         emit({ type: 'provider_success', provider: p.provider, model: p.model, ms, usage, ...meta });

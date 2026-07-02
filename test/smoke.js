@@ -292,6 +292,23 @@ const mockProvider = (name, behavior) => ({
     assert.strictEqual(capturados[0].output_tokens, 45);
   });
 
+  await test('validate: salida inválida → cae al siguiente proveedor', async () => {
+    const malo = mockProvider('A', 'ok');   // devuelve texto pero NO JSON
+    const bueno = { ...mockProvider('B', 'ok'), call: async () => '[{"nombre":"Vet X"}]' };
+    const r = createRouter({ providers: [malo, bueno] });
+    const out = await r.run({ user: 'extrae', validate: (t) => { JSON.parse(t); return true; } });
+    assert.strictEqual(out.provider, 'B');
+    assert.strictEqual(out.attempts, 2);
+  });
+
+  await test('validate: todos inválidos → RouterError (el caller decide el fallback determinista)', async () => {
+    const r = createRouter({ providers: [mockProvider('A', 'ok'), mockProvider('B', 'ok')] });
+    await assert.rejects(
+      () => r.run({ user: 'extrae', validate: () => false }),
+      (e) => e instanceof RouterError && e.attempts.length === 2,
+    );
+  });
+
   console.log('TELEMETRÍA WATCH');
   const { createWatchTelemetry } = require('../src/telemetry/watch');
   const watchCfg = { ingestUrl: 'https://watch.test', apiKey: 'zw_test', clientId: 'client_x', agentId: 'agent_y' };

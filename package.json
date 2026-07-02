@@ -1,6 +1,6 @@
 {
   "name": "@zenith/agent-core",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Runtime compartido para todos los agentes ZENITH: router multimodelo con fallback y tool-calling, memoria en capas, registro de skills deterministas, verificador de acciones irreversibles y telemetría hacia ZENITH Watch. Cero dependencias en runtime.",
   "license": "UNLICENSED",
   "private": true,
