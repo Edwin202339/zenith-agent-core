@@ -18,6 +18,59 @@ Runtime compartido para **todos** los agentes ZENITH. No es un producto: es la b
 
 ---
 
+## Instalación (consumidores externos: AURA, HERALD, verticales nuevos)
+
+El paquete vive publicado en **https://github.com/Edwin202339/zenith-agent-core** (privado).
+
+```bash
+npm install github:Edwin202339/zenith-agent-core
+```
+
+⚠️ **Railway + repo privado:** para que `npm install` funcione en el build de Railway hay que
+darle acceso: crear un GitHub token (fine-grained, solo lectura de ese repo) y en Railway setear
+`NPM_CONFIG_//github.com/:_authToken` o usar la URL con token en package.json. Alternativa sin
+fricción: hacer el repo público (no contiene secretos — es solo el runtime).
+
+### Rutina de publicación (tras cambiar el core dentro de ZENITH_HOME)
+
+La fuente de verdad sigue siendo `ZENITH_HOME/02_DESARROLLO/zenith-agent-core`. Después de
+commitear cambios ahí, re-publicar así desde la raíz de ZENITH_HOME:
+
+```bash
+git subtree split --prefix=02_DESARROLLO/zenith-agent-core -b agent-core-publish
+git push https://github.com/Edwin202339/zenith-agent-core.git agent-core-publish:main
+git branch -D agent-core-publish
+```
+
+## Tool-calling (v1.1)
+
+```js
+const out = await router.run({
+  system: 'Eres el agente de la clínica...',
+  user: 'quiero cita mañana a las 10',
+  tools: [{ name: 'agendar_cita', description: '...', input_schema: { type: 'object', properties: { fecha: { type: 'string' } } } }],
+});
+// out = { text, toolUse: { id, name, input } | null, content, usage: { inputTokens, outputTokens }, provider, model, ms }
+
+if (out.toolUse) {
+  const resultado = miTool(out.toolUse.input);            // ejecutar la herramienta (con verifier si es irreversible)
+  const followUp = await router.run({
+    system: '...', user: 'x',
+    tools: [...],
+    rawMessages: [                                         // turno crudo formato Anthropic
+      { role: 'user', content: 'quiero cita mañana a las 10' },
+      { role: 'assistant', content: out.content },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: out.toolUse.id, content: resultado }] },
+    ],
+  });
+}
+```
+
+- `tools` solo llega a providers con `supportsTools` (anthropic); los demás corren **sin** tools
+  → fallback degradado a texto (mismo comportamiento que AURA hoy).
+- `rawMessages` salta providers texto-only (no saben interpretar content blocks).
+- `usage` trae tokens reales (Anthropic y Gemini) y viaja hasta la telemetría de Watch.
+
 ## Router
 
 ```js
