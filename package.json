@@ -11,7 +11,8 @@
     "./router": "./src/router/index.js",
     "./skills": "./src/skills/index.js",
     "./memory": "./src/memory/index.js",
-    "./verifier": "./src/verifier/index.js"
+    "./verifier": "./src/verifier/index.js",
+    "./telemetry": "./src/telemetry/watch.js"
   },
   "scripts": {
     "test": "node test/smoke.js",

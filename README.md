@@ -14,6 +14,7 @@ Runtime compartido para **todos** los agentes ZENITH. No es un producto: es la b
 | **Skills** | Determinismo primero: resuelve con código antes de gastar un token. | Donde repites lógica determinista |
 | **Memory** | 4 capas (working/episodic/semantic/relational) sobre un store intercambiable. | Agentes que recuerdan entre sesiones |
 | **Verifier** | propose→verify→apply para acciones irreversibles. | Calendar, email, WhatsApp, Sheets |
+| **Telemetría Watch** | Reporta cada llamada LLM a ZENITH Watch (latencia/errores/fallback), fire-and-forget. | `onEvent: createWatchTelemetry()` en todo router |
 
 ---
 

@@ -8,6 +8,7 @@ const router = require('./src/router');
 const skills = require('./src/skills');
 const memory = require('./src/memory');
 const verifier = require('./src/verifier');
+const telemetry = require('./src/telemetry/watch');
 
 module.exports = {
   // Router multimodelo
@@ -27,4 +28,7 @@ module.exports = {
   // Verificador de acciones irreversibles
   proposeVerifyApply: verifier.proposeVerifyApply,
   VerificationError: verifier.VerificationError,
+
+  // Telemetría hacia ZENITH Watch (observabilidad: latencia/errores/fallback)
+  createWatchTelemetry: telemetry.createWatchTelemetry,
 };

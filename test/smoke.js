@@ -221,6 +221,74 @@ const mockProvider = (name, behavior) => ({
     assert.strictEqual(applied, false);
   });
 
+  console.log('TELEMETRÍA WATCH');
+  const { createWatchTelemetry } = require('../src/telemetry/watch');
+  const watchCfg = { ingestUrl: 'https://watch.test', apiKey: 'zw_test', clientId: 'client_x', agentId: 'agent_y' };
+
+  await test('sin config → no-op que nunca llama fetch', async () => {
+    let llamado = false;
+    const onEvent = createWatchTelemetry({ fetchFn: async () => { llamado = true; } });
+    onEvent({ type: 'provider_success', provider: 'anthropic', model: 'm', ms: 10 });
+    assert.strictEqual(llamado, false);
+  });
+
+  await test('provider_success → POST con AgentEvent válido', async () => {
+    let captura = null;
+    const onEvent = createWatchTelemetry({ ...watchCfg, fetchFn: async (url, opts) => { captura = { url, opts }; } });
+    onEvent({ type: 'provider_success', provider: 'gemini', model: 'gemini-2.5-flash', ms: 120, sessionId: 's1' });
+    await new Promise((r) => setImmediate(r));
+    assert.ok(captura.url.endsWith('/api/v1/agent-events'));
+    assert.strictEqual(captura.opts.headers['X-Watch-Client-Key'], 'zw_test');
+    const evt = JSON.parse(captura.opts.body).events[0];
+    assert.ok(evt.event_id.startsWith('evt_'));
+    assert.strictEqual(evt.provider, 'google');       // gemini → google (enum de Watch)
+    assert.strictEqual(evt.status, 'success');
+    assert.strictEqual(evt.session_id, 's1');
+    assert.strictEqual(evt.duration_ms, 120);
+  });
+
+  await test('provider_error → status error con error_code', async () => {
+    let captura = null;
+    const onEvent = createWatchTelemetry({ ...watchCfg, fetchFn: async (url, opts) => { captura = opts; } });
+    onEvent({ type: 'provider_error', provider: 'anthropic', model: 'haiku', ms: 50, error: 'rate limit' });
+    await new Promise((r) => setImmediate(r));
+    const evt = JSON.parse(captura.body).events[0];
+    assert.strictEqual(evt.status, 'error');
+    assert.strictEqual(evt.error_code, 'rate limit');
+  });
+
+  await test('providers fuera del enum de Watch (groq/ollama) y eventos attempt/skip se omiten', async () => {
+    let llamadas = 0;
+    const onEvent = createWatchTelemetry({ ...watchCfg, fetchFn: async () => { llamadas++; } });
+    onEvent({ type: 'provider_success', provider: 'groq', model: 'llama', ms: 5 });
+    onEvent({ type: 'provider_success', provider: 'ollama', model: 'phi', ms: 5 });
+    onEvent({ type: 'provider_attempt', provider: 'anthropic', model: 'haiku' });
+    onEvent({ type: 'provider_skip', provider: 'anthropic', model: 'haiku' });
+    await new Promise((r) => setImmediate(r));
+    assert.strictEqual(llamadas, 0);
+  });
+
+  await test('fetch que lanza o rechaza JAMÁS rompe al agente', async () => {
+    const onEventRechaza = createWatchTelemetry({ ...watchCfg, fetchFn: async () => { throw new Error('watch caído'); } });
+    onEventRechaza({ type: 'provider_success', provider: 'anthropic', model: 'm', ms: 1 });
+    const onEventLanza = createWatchTelemetry({ ...watchCfg, fetchFn: () => { throw new Error('sync boom'); } });
+    onEventLanza({ type: 'provider_error', provider: 'anthropic', model: 'm', ms: 1, error: 'x' });
+    await new Promise((r) => setImmediate(r));
+    // Si llegamos aquí sin excepción ni unhandled rejection, la regla se cumple.
+    assert.ok(true);
+  });
+
+  await test('integración: router con onEvent de Watch reporta éxito', async () => {
+    const eventos = [];
+    const onEvent = createWatchTelemetry({ ...watchCfg, fetchFn: async (_url, opts) => { eventos.push(JSON.parse(opts.body).events[0]); } });
+    const r = createRouter({ providers: [mockProvider('anthropic', 'ok')], onEvent });
+    await r.run({ user: 'hola' });
+    await new Promise((res) => setImmediate(res));
+    assert.strictEqual(eventos.length, 1);
+    assert.strictEqual(eventos[0].provider, 'anthropic');
+    assert.strictEqual(eventos[0].status, 'success');
+  });
+
   // Limpieza
   try { fs.unlinkSync(tmpFile); } catch { /* noop */ }
 
