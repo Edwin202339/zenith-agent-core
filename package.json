@@ -3,9 +3,10 @@
   "version": "1.2.0",
   "description": "Runtime compartido para todos los agentes ZENITH: router multimodelo con fallback y tool-calling, memoria en capas, registro de skills deterministas, verificador de acciones irreversibles y telemetría hacia ZENITH Watch. Cero dependencias en runtime.",
   "license": "UNLICENSED",
-  "private": true,
+  "private": false,
   "type": "commonjs",
   "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
     ".": "./index.js",
     "./router": "./src/router/index.js",
