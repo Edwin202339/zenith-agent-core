@@ -8,10 +8,18 @@ const { fetchWithTimeout } = require('./_fetch');
 // @param {string} [cfg.model]     Default 'gemini-2.5-flash'. Para extracción usar 'gemini-2.5-flash-lite'.
 // @param {string} [cfg.apiKeyEnv] Default 'GEMINI_API_KEY'.
 // @param {number} [cfg.timeoutMs] Default 20000.
+// @param {number} [cfg.thinkingBudget] Los modelos 2.5 de Gemini razonan internamente antes
+//   de responder ("thinking"), y esos tokens de razonamiento CONSUMEN el mismo presupuesto
+//   que maxOutputTokens salvo que se limiten explícitamente — sin esto, una tarea de texto
+//   corto (ej. resumen de 3 frases) puede llegar cortada a mitad de palabra porque el
+//   razonamiento oculto ya gastó casi todo el budget. Pasa 0 para desactivar el razonamiento
+//   en tareas de síntesis simple donde no aporta (más rápido y barato, y sin este bug).
+//   Sin especificar: se deja el comportamiento por defecto de la API (razonamiento dinámico).
 module.exports = function gemini(cfg = {}) {
   const model = cfg.model || 'gemini-2.5-flash';
   const apiKeyEnv = cfg.apiKeyEnv || 'GEMINI_API_KEY';
   const timeoutMs = cfg.timeoutMs || 20000;
+  const thinkingBudget = cfg.thinkingBudget;
 
   return {
     provider: 'google',
@@ -22,10 +30,11 @@ module.exports = function gemini(cfg = {}) {
       if (!apiKey) throw new Error(`${apiKeyEnv} no configurada`);
 
       const contents = [...history, { role: 'user', parts: [{ text: user }] }];
-      const body = {
-        contents,
-        generationConfig: { maxOutputTokens: maxTokens, temperature },
-      };
+      const generationConfig = { maxOutputTokens: maxTokens, temperature };
+      if (typeof thinkingBudget === 'number') {
+        generationConfig.thinkingConfig = { thinkingBudget };
+      }
+      const body = { contents, generationConfig };
       if (system) body.system_instruction = { parts: [{ text: system }] };
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
