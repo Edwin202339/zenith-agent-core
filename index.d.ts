@@ -20,6 +20,13 @@ export interface RawMessage {
   content: string | RawContentBlock[];
 }
 
+/** Turno crudo tal como lo entrega el SDK de Anthropic (`Anthropic.MessageParam`),
+ *  con `role` incluyendo `'system'` y bloques de contenido con tipos nombrados sin
+ *  index signature (`TextBlockParam`, etc.) — no estructuralmente asignable a
+ *  RawMessage/RawContentBlock. `rawMessages` acepta ambas formas: el provider solo
+ *  hace `JSON.stringify` de esto, es pass-through opaco, no lo interpreta agent-core. */
+export type AnySdkMessage = { role: string; content: unknown };
+
 export interface HistoryTurn {
   role: 'user' | 'model' | 'assistant';
   parts?: Array<{ text: string }>;
@@ -36,8 +43,10 @@ export interface LLMRequest {
   tools?: unknown[];
   toolChoice?: { type: string; name?: string };
   /** Turnos crudos (content blocks) para follow-ups de tools. Providers sin
-   *  supportsRawMessages se saltan cuando esto viene presente. */
-  rawMessages?: RawMessage[];
+   *  supportsRawMessages se saltan cuando esto viene presente. Acepta RawMessage
+   *  propio o el MessageParam del SDK de Anthropic (AnySdkMessage) — pass-through
+   *  opaco, agent-core no valida su forma más allá de role/content. */
+  rawMessages?: Array<RawMessage | AnySdkMessage>;
   /** Validador de salida: falsy/throw = el proveedor "falló" → siguiente en la cadena. */
   validate?: (text: string, out: { toolUse: ToolUse | null; content: unknown; usage: Usage | null }) => unknown;
 }
