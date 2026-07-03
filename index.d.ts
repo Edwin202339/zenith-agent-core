@@ -129,6 +129,11 @@ export interface GeminiProviderConfig {
   model?: string;
   apiKeyEnv?: string;
   timeoutMs?: number;
+  /** Solo modelos 2.5: presupuesto de tokens de razonamiento interno ("thinking").
+   *  Pasa 0 para desactivarlo en tareas de síntesis simple (evita que el thinking
+   *  consuma el budget de maxTokens y corte la respuesta a mitad de frase).
+   *  Sin especificar: comportamiento por defecto de la API (razonamiento dinámico). */
+  thinkingBudget?: number;
 }
 export interface GroqProviderConfig {
   models?: string[];
