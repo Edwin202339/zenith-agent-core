@@ -18,6 +18,30 @@ Runtime compartido para **todos** los agentes ZENITH. No es un producto: es la b
 
 ---
 
+## ⚠️ Import desde ESM (`type: "module"`) — usar default import
+
+Node's cjs-module-lexer (síntesis estática de named exports para CJS→ESM) resultó
+**inconsistente contra este paquete** en pruebas: a veces solo detecta la primera
+clave de `module.exports` y falla con `SyntaxError: Named export 'X' not found`
+para las demás, de forma no determinista según cómo se importe. Root cause no
+aislado con certeza (probablemente una limitación del lexer con objetos-literal
+multilínea de más de una entrada) — el fix robusto es evitar depender de esa
+síntesis por completo:
+
+```js
+// ❌ Frágil bajo ESM (`"type": "module"` en package.json) — puede fallar en runtime
+import { createRouter, createWatchTelemetry } from '@zenith/agent-core';
+
+// ✅ Robusto — default import + destructure (Node lo sugiere en el propio error)
+import zenithAgentCore from '@zenith/agent-core';
+const { createRouter, providers, createWatchTelemetry } = zenithAgentCore;
+```
+
+Desde CommonJS (`require`) no hay ningún problema — `require('@zenith/agent-core')`
+siempre expone todas las claves correctamente; el import default+destructure es
+solo necesario para consumidores ESM (Next.js `.ts` compila a CJS vía tsc, así que
+tampoco le afecta — el caso real es un `.mjs`/`"type":"module"` puro, como ZENITH_WEB).
+
 ## Instalación (consumidores externos: AURA, HERALD, verticales nuevos)
 
 El paquete vive publicado en **https://github.com/Edwin202339/zenith-agent-core** (privado).
